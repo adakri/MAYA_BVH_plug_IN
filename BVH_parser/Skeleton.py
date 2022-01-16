@@ -1,5 +1,4 @@
-import pymel.core as pm
-import maya.cmds as mc
+
 import os
 
 # This maps the BVH naming convention to Maya
