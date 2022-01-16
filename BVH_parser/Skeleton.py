@@ -11,4 +11,4 @@ translationDict = {
     "Zrotation": "rotateZ"
 }
 
-print("here")
+print("Skeleton added")

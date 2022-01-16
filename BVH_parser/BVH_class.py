@@ -15,29 +15,14 @@ class BvhNode:
         self._children = []
         self._parent = parent
         self._name = name
-        if self._parent:
-            self._parent.add_child(self)
 
     def add_child(self, item):
         item._parent = self
         self._children.append(item)
 
-    def __iter__(self):
-        for child in self._children:
-            yield child
+    def __str__(self):
+        return "**"+"Node: " + self._name + "\n" + str(self._offset) + "\n" + str(self._channels) + "\n" +"======================================================="
 
-    def __getitem__(self, key):
-        for child in self._children:
-            for index, item in enumerate(child.value):
-                if item == key:
-                    if index + 1 >= len(child.value):
-                        return None
-                    else:
-                        return child.value[index + 1:]
-        raise IndexError('key {} not found'.format(key))
-
-    def __repr__(self):
-        return "Node: " + self._name
 
     def objPath(self):
         # return object path 
@@ -74,55 +59,80 @@ class HIERARCHY():
 
         f = open(self._filename, 'r')
 
-        if f.next().startswith("HIERARCHY"):
-            print("=========== Found hierarchy ==========")
-        else:
-            pass
 
         CLOSE = False
         
         for line in f:
+            if line.startswith("HIERARCHY"):
+                print("=========== Found hierarchy ==========")
+            else:
+                pass
+            
             # Start parsing, we are at Hierarchy here, I hope
             if not motion_frame:
                 # root joint
                 if line.startswith("ROOT"):
                     # update the tree 
-                    self._root = BvhNode(line[5:].rstrip())
-                    current_parent = self._root
-
+                    print("Found root")
+                    current_parent= BvhNode(line[5:].rstrip())
+                    self._root = current_parent
+                    print("================")
+                    print(current_parent._name)
+                    print(current_parent._parent)
+                    print("================")
+                    
+                    
+                
                 if "MOTION" in line:
+                    print("Found Motion")
                     # Break
                     motion_frame = True		
 
                 if "CHANNELS" in line:
+                    print("Found channels")
+                    current_parent._channels = []
                     curr_chan = line.strip().split(" ")
                     # Adapt the channel rotations
                     chan_nb_param = int(curr_chan[1]) 
                     for nb in range(chan_nb_param):
-                        current_parent._channels.append(curr_chan[nb + 1])
+                        current_parent._channels.append(curr_chan[nb+2])
+                        
+                    print(current_parent._channels)
                         
                 if "OFFSET" in line:
+                    print("Found offset")
                     curr_offset = line.strip().split(" ")
-                    joint_name = str(current_parent)
-                    if CLOSE:
-                        joint_name = joint_name + "_end" # add _end to print
                     
                     current_parent._offset = [float(curr_offset[1]), float(curr_offset[2]), float(curr_offset[3])]
-
+                    
+                    
                 if "JOINT" in line:
+                    print("Found joint")
                     new_joint = line.split(" ") 
-                    # initiate with old parent
-                    current_parent = BvhNode(new_joint[-1].rstrip(), current_parent)
-
+                    # initiate with old parent and add to children
+                    old_parent  = current_parent
+                    # switch to newest children
+                    current_parent = BvhNode(new_joint[-1].rstrip())
+                    current_parent._parent = old_parent
+                    
+                    old_parent._children.append(current_parent)
+                    
+                    print("================")
+                    print(current_parent._name)
+                    print(current_parent._parent._name)
+                    print("================")
+                    
                 if "End" in line:
+                    print("Found end")
                     CLOSE = True 
                     
                 # return 
                 if "}" in line:
+                    print("Found {}")
                     if CLOSE:
                         CLOSE = False
                         continue
-                        
+                    # walk up  
                     if current_parent._parent is not None:
                         current_parent = current_parent._parent
             else:
@@ -135,10 +145,17 @@ class HIERARCHY():
                             
                             frame = frame + 1
 
-    def __repr__(self):
+    def __str__(self):
         representation = ""
-        for i in self._children:
-            representation = representation + str(repr(i))
+        print("================Printing the BVH file===============")
+        pointer = self._root
+        while(len(pointer._children) != 0):
+            print("*******")
+            if(pointer == None):
+                break
+            else:
+                representation += str(print(pointer))
+                pointer = pointer._children[0]
         return representation
 
     def get_joints_names(self):
@@ -151,20 +168,13 @@ class HIERARCHY():
 
 if __name__ == "__main__":
 
-    data_folder = os.path.join("C:", "Users", "icasi","Documents", "ANIMATION_3D", "ANIMATION_3D_project" )
-
-    print(data_folder)
-
-    FILE_NAME = os.path.join(data_folder, "walk.bvh")
+    FILE_NAME = "../walk.bvh"
 
     print(FILE_NAME)
     
 
     bvh_f = HIERARCHY(FILE_NAME)
     bvh_f.parse()
-
+    
     print(bvh_f)
 
-    # list = bvh_f.get_joints_names()
-
-    bvh_file.close()
