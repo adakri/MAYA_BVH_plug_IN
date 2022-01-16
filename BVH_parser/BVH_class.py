@@ -6,7 +6,7 @@ import os.path
 
 class BvhNode:
     """
-    Class torepresent a node in the bvh file.
+    Class to represent a node in the bvh file.
     """
 
     def __init__(self,  name, offset=[], channels=[], parent=None):
@@ -37,7 +37,7 @@ class BvhNode:
         raise IndexError('key {} not found'.format(key))
 
     def __repr__(self):
-        return str(' '.join(self.value))
+        return "Node: " + self._name
 
     def objPath(self):
         # return object path 
@@ -142,14 +142,11 @@ class HIERARCHY():
         return representation
 
     def get_joints_names(self):
-        joints = []
-
-        def iterate_joints(joint):
-            joints.append(joint.value[1])
-            for child in joint.filter('JOINT'):
-                iterate_joints(child)
-        iterate_joints(next(self.root.filter('ROOT')))
+        joints = ""
+        for i in self._nodes:
+            joints += str(i._name)
         return joints
+        
 
 
 if __name__ == "__main__":
