@@ -57,8 +57,8 @@ class BvhNode:
             # Ah recusrsion, my old enemy
             # the object path I copied from somewhere
             # Would have never guessed it, it is a format
-            return "%s|%s" % (self._parent.objPath(), self.__str__())
-        return str(self._name)
+            return self._parent.objPath()+"|"+ self._name
+        return self._name
 
 
 class HIERARCHY():
@@ -86,6 +86,16 @@ class HIERARCHY():
 
         f = open(self._filename, 'r')
 
+        if rootNode is None: # if we are here for the first time 
+            group = pm.group(em=True,name="_mocap_"+self._filename+"_grp")
+            group.scale.set(1.0, 1.0, 1.0) # scale 1.0
+
+            # The group is now the 'root'
+            curr_parent = BvhNode(str(group), None)
+        else:
+            curr_parent = BvhNode(str(rootNode), None)
+            #self._clear_animation()
+
 
         CLOSE = False
         
@@ -103,11 +113,12 @@ class HIERARCHY():
                     print("Found root")
                     current_parent= BvhNode(line[5:].rstrip())
                     self._root = current_parent
+                    """
                     print("================")
                     print(current_parent._name)
                     print(current_parent._parent)
                     print("================")
-                    
+                    """
                     
                 
                 if "MOTION" in line:
@@ -120,13 +131,14 @@ class HIERARCHY():
                     current_parent._channels = []
                     curr_chan = line.strip().split(" ")
                     # Adapt the channel rotations
-                    chan_nb_param = int(curr_chan[1]) 
+                    chan_nb_param = int(curr_chan[1])
+                    print(current_parent.objPath()) 
                     for nb in range(chan_nb_param):
                         current_parent._channels.append(curr_chan[nb+2])
-                        print(curr_chan[nb+2])
-                        channel_list.append("%s.%s" % (current_parent.objPath(), translationDict[curr_chan[nb+2]])) # create full name, used later 
-                        
-                    print(current_parent._channels)
+                        #print(curr_chan[nb+2])
+                        channel_list.append(current_parent.objPath()+"."+translationDict[curr_chan[nb+2]]) # create full name, used later 
+                        #print("***",channel_list[-1])
+                    #print(current_parent._channels)
                         
                 if "OFFSET" in line:
                     print("Found offset")
@@ -152,7 +164,7 @@ class HIERARCHY():
                         continue
                     # create the joint
                     curr_joint = pm.joint(name=current_parent._name, p=(0,0,0))
-                    curr_joint.translate.set([float(current_parent._offset[-1]), float(current_parent._offset[-2]), float(current_parent._offset[-3])])
+                    curr_joint.translate.set([float(current_parent._offset[0]), float(current_parent._offset[1]), float(current_parent._offset[2])])
                     curr_joint.rotateOrder.set(rotOrder)
                     
                 if "JOINT" in line:
@@ -166,11 +178,12 @@ class HIERARCHY():
                     
                     old_parent._children.append(current_parent)
                     
+                    """
                     print("================")
                     print(current_parent._name)
                     print(current_parent._parent._name)
                     print("================")
-                    
+                    """
                 if "End" in line:
                     print("Found end")
                     CLOSE = True 
@@ -178,17 +191,17 @@ class HIERARCHY():
                 # return 
                 if "}" in line:
                     print("Found {}")
-                    pm.select(current_parent._name)
                     if CLOSE:
                         CLOSE = False
                         continue
                     # walk up  
                     if current_parent._parent is not None:
                         current_parent = current_parent._parent
+                        if current_parent is not None: # if still not None select it
+                            mc.select(current_parent.objPath())
             else:
                 print("IN MOTION")
                 
-                print(line)
                 if "Frame" not in line:
                     # the first two lines are not relevant to my knowledge
                     data = line.split(" ")
@@ -196,13 +209,14 @@ class HIERARCHY():
                         if data[0] == "":
                             data.pop(0) 
                     
+                    print(channel_list)
+                    print(data)
+                    
                     # Set the values to channels
                     for x in range(0, len(data) - 1 ): # for all keyframes
-                        mc.setKeyframe(attribute=channel_list[x], time=frame, value=float(data[x])) # add keyframe, easy in maya, need animcurve in c++
-
+                        mc.setKeyframe(channel_list[x],time=frame, value=float(data[x])) # add keyframe, easy in maya, need animcurve in c++                  
                     
                     frame = frame + 1
-
     def __str__(self):
         representation = ""
         print("================Printing the BVH file===============")
