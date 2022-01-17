@@ -3,6 +3,9 @@ from Parser import *
 from Skeleton import *
 import os.path
 
+import pymel.core as pm # use pm
+import maya.cmds as mc # maya commands
+
 
 class BvhNode:
     """
@@ -21,7 +24,7 @@ class BvhNode:
         self._children.append(item)
 
     def __str__(self):
-        return "**"+"Node: " + self._name + "\n" + str(self._offset) + "\n" + str(self._channels) + "\n" +"======================================================="
+        return "Node: " + self._name + "\n" + str(self._offset) + "\n" + str(self._channels) + "\n" +"======================================================="
 
 
     def objPath(self):
@@ -29,7 +32,7 @@ class BvhNode:
         if self._parent is not None:
             # Ah recusrsion, my old enemy
             # the object path I copied from somewhere
-            # Would have never guessed it
+            # Would have never guessed it, it is a format
             return "%s|%s" % (self.parent.objPath(), self.__str__())
         return str(self.name)
 
@@ -96,6 +99,7 @@ class HIERARCHY():
                     chan_nb_param = int(curr_chan[1]) 
                     for nb in range(chan_nb_param):
                         current_parent._channels.append(curr_chan[nb+2])
+                        channel_list.append("%s.%s" % (curr_parent.objPath(), maya_notation(curr_chan[nb+2]))) # create full name, used later 
                         
                     print(current_parent._channels)
                         
@@ -105,6 +109,26 @@ class HIERARCHY():
                     
                     current_parent._offset = [float(curr_offset[1]), float(curr_offset[2]), float(curr_offset[3])]
                     
+                    # add end at the end with end site
+                    if(CLOSE):
+                        current_parent._name = current_parent._name + "_end" 
+                    
+                    
+                    #===========================================
+                    # expermenting with pymel here we are at the end of an objject, we have to instantiate it in maya (fingers crossed)
+                    
+                    objpath = current_parent.objPath()
+    				# create object by specifying fullpath using pymel module (autodesk tutorials)
+                    if mc.objExists(str(current_parent.objPath())):
+                        # already exists, don't create it just translate it (if in ather frames, any better ideas, this seems not optimal)
+                        curr_joint = pm.PyNode(objpath)
+                        curr_joint.rotateOrder.set(rotOrder)
+                        curr_joint.translate.set([float(current_parent._offset[-1]), float(current_parent._offset[-2]), float(current_parent._offset[-3])])
+                        continue
+                    # create the joint
+                    curr_joint = pm.joint(name=current_parent._name, p=(0,0,0))
+                    curr_joint.translate.set([float(current_parent._offset[-1]), float(current_parent._offset[-2]), float(current_parent._offset[-3])])
+                    curr_joint.rotateOrder.set(rotOrder)
                     
                 if "JOINT" in line:
                     print("Found joint")
@@ -137,13 +161,18 @@ class HIERARCHY():
                         current_parent = current_parent._parent
             else:
                 if "Frame" not in line:
-                            data = line.split(" ")
-                            if len(data) > 0:
-                                if data[0] == "":
-                                    data.pop(0) 
-                            
-                            
-                            frame = frame + 1
+                    # the first two lines are not relevant to my knowledge
+                    data = line.split(" ")
+                    if len(data) > 0:
+                        if data[0] == "":
+                            data.pop(0) 
+                    
+                    # Set the values to channels
+                    for x in range(0, len(data) - 1 ): # for all keyframes
+                        mc.setKeyframe(channel_list[x], time=frame, value=float(data[x])) # add keyframe, easy in maya, need animcurve in c++
+
+                    
+                    frame = frame + 1
 
     def __str__(self):
         representation = ""
