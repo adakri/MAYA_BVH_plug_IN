@@ -1,7 +1,31 @@
 import re
-from Parser import *
-from Skeleton import *
+#from Parser import *
+#import Skeleton as skeleton
 import os.path
+
+def parse_hierarchy_motion(file):
+    hierarchy = []
+    motion = []
+    bvh_file = [hierarchy, motion]
+
+    i = 0
+    for line in file:
+
+        if("MOTION" in line):
+            i = 1
+        bvh_file[i].append(line)
+    return hierarchy, motion
+
+# This maps the BVH naming convention to Maya
+translationDict = {
+    "Xposition": "translateX",
+    "Yposition": "translateY",
+    "Zposition": "translateZ",
+    "Xrotation": "rotateX",
+    "Yrotation": "rotateY",
+    "Zrotation": "rotateZ"
+}
+
 
 import pymel.core as pm # use pm
 import maya.cmds as mc # maya commands
@@ -33,8 +57,8 @@ class BvhNode:
             # Ah recusrsion, my old enemy
             # the object path I copied from somewhere
             # Would have never guessed it, it is a format
-            return "%s|%s" % (self.parent.objPath(), self.__str__())
-        return str(self.name)
+            return "%s|%s" % (self._parent.objPath(), self.__str__())
+        return str(self._name)
 
 
 class HIERARCHY():
@@ -99,7 +123,8 @@ class HIERARCHY():
                     chan_nb_param = int(curr_chan[1]) 
                     for nb in range(chan_nb_param):
                         current_parent._channels.append(curr_chan[nb+2])
-                        channel_list.append("%s.%s" % (curr_parent.objPath(), maya_notation(curr_chan[nb+2]))) # create full name, used later 
+                        print(curr_chan[nb+2])
+                        channel_list.append("%s.%s" % (current_parent.objPath(), translationDict[curr_chan[nb+2]])) # create full name, used later 
                         
                     print(current_parent._channels)
                         
@@ -153,6 +178,7 @@ class HIERARCHY():
                 # return 
                 if "}" in line:
                     print("Found {}")
+                    pm.select(current_parent._name)
                     if CLOSE:
                         CLOSE = False
                         continue
@@ -160,6 +186,9 @@ class HIERARCHY():
                     if current_parent._parent is not None:
                         current_parent = current_parent._parent
             else:
+                print("IN MOTION")
+                
+                print(line)
                 if "Frame" not in line:
                     # the first two lines are not relevant to my knowledge
                     data = line.split(" ")
@@ -169,7 +198,7 @@ class HIERARCHY():
                     
                     # Set the values to channels
                     for x in range(0, len(data) - 1 ): # for all keyframes
-                        mc.setKeyframe(channel_list[x], time=frame, value=float(data[x])) # add keyframe, easy in maya, need animcurve in c++
+                        mc.setKeyframe(attribute=channel_list[x], time=frame, value=float(data[x])) # add keyframe, easy in maya, need animcurve in c++
 
                     
                     frame = frame + 1
@@ -197,7 +226,7 @@ class HIERARCHY():
 
 if __name__ == "__main__":
 
-    FILE_NAME = "../walk.bvh"
+    FILE_NAME = "C:\\Users\\icasi\\Documents\\ANIMATION_3D\\ANIMATION_3D_projet\\walk.bvh"
 
     print(FILE_NAME)
     
@@ -205,5 +234,5 @@ if __name__ == "__main__":
     bvh_f = HIERARCHY(FILE_NAME)
     bvh_f.parse()
     
-    print(bvh_f)
+    #print(bvh_f)
 
