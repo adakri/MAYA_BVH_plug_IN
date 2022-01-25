@@ -69,9 +69,13 @@
 #include <maya/MFileIO.h>
 #include <maya/MFnTransform.h>
 #include <maya/MNamespace.h>
+#include <maya/MFnIkJoint.h> 
 
 #include <fstream>
 #include <iostream>
+#include <sstream>
+#include <string.h>
+#include <vector>
 #include <ios>
 
 //This is the backbone for creating a MPxFileTranslator
@@ -79,9 +83,9 @@ class BvhTranslator : public MPxFileTranslator {
 public:
 
     //Constructor
-    BvhTranslator () {};
+    BvhTranslator() {};
     //Destructor
-               ~BvhTranslator () override {};
+    ~BvhTranslator() override {};
 
     //This tells maya that the translator can read files.
     //Basically, you can import or load with your translator.
@@ -102,9 +106,9 @@ public:
 
     //This method is used by Maya to create instances of the translator.
     static void* creator();
-    
+
     //This returns the default extension ".Bvh" in this case.
-    MString defaultExtension () const override;
+    MString defaultExtension() const override;
 
     //If this method returns true it means that the translator can handle opening files 
     //as well as importing them.
@@ -115,19 +119,19 @@ public:
 
     //Maya will call this method to determine if our translator
     //is capable of handling this file.
-    MFileKind identifyFile (    const MFileObject& fileName,
-                                                const char* buffer,
-                                                short size) const override;
+    MFileKind identifyFile(const MFileObject& fileName,
+        const char* buffer,
+        short size) const override;
 
     //This function is called by maya when import or open is called.
-    MStatus reader ( const MFileObject& file,
-                                        const MString& optionsString,
-                            MPxFileTranslator::FileAccessMode mode) override;
+    MStatus reader(const MFileObject& file,
+        const MString& optionsString,
+        MPxFileTranslator::FileAccessMode mode) override;
 
     //This function is called by maya when export or save is called.
-    MStatus writer ( const MFileObject& file,
-                                        const MString& optionsString,
-                             MPxFileTranslator::FileAccessMode mode) override;
+    MStatus writer(const MFileObject& file,
+        const MString& optionsString,
+        MPxFileTranslator::FileAccessMode mode) override;
 
 private:
     //The magic string to verify it's a Bvh file
@@ -144,45 +148,348 @@ void* BvhTranslator::creator()
 // Initialize our magic string
 MString const BvhTranslator::magic("HIERARCHY");
 
+
+//Uisng the notation conversion fromp the Maya python API
+std::string maya_convert_notation(std::string str) {
+    if (str == "Xposition") {
+        return "translateX";
+    }
+    else if (str == "Yposition") {
+        return "translateY";
+    }
+    else if (str == "Zposition") {
+        return "translationZ";
+    }
+    else if (str == "Xrotation") {
+        return "rotateX";
+    }
+    else if (str == "Yrotation") {
+        return "rotateY";
+    }
+    else if (str == "Zrotation") {
+        return "rotateZ";
+    }
+    return "";
+}
+
+// Understanding chars or strings seems to fail
+// Let's do this manually
+// Convert the Mstring to an Mstring (takes an Mstring as input)
+// Tkaen from a C tutorial for stripping words from a string
+MStringArray split_space(const MStringArray& array)
+{
+    MString tmp_string;
+    const char* curr_chaine = NULL;
+    unsigned int curr_length = 0;
+    MStringArray ret(array.length(), MString(""));
+
+    for (unsigned int i = 0; i < array.length(); i++) {
+
+        std::string curr_string(array[i].asChar());
+        std::string final;
+        for (int j = 0; j < curr_string.length(); j++) {
+            if ((curr_string[j] != ' ') && (curr_string[j] != '\n') &&
+                (curr_string[j] != '\0') && (curr_string[j] != '\t')) {
+                final += curr_string[j];
+            }
+        }
+        ret[i] = MString(final.c_str());
+    }
+    return ret;
+}
+
+//  Try comparing arrays to mstring
+
+
+
+#define dump(a) std::cout << #a " : " << (a) << std::endl;
+#define detail(a) std::cout << "["; for (auto s : line){ std::cout << s << "|";} std::cout << "]\n";
+
+bool parseJoint1(const MFileObject& file) 
+{
+    const MString fname = file.fullName();
+    
+    // No std vectors, have to include them
+    std::vector<std::string> buffer;
+
+    std::ifstream inputfile(fname.asChar(), ios::in);
+
+    // skip first line (hierarchy)
+    std::string line;
+
+    std::getline(inputfile, line);
+
+    bool isMotion = false;
+
+    // premature Stopping conditions
+
+    //if (line != "HIERARCHY ")
+    if(line.find("HIERARCHY ") != std::string::npos)
+    {
+        cerr << fname << ":does not contain a hierarchy" << std::endl;
+        return MS::kFailure;
+    }
+
+    // open failed
+    if (!inputfile) {
+        cerr << fname << ":does not exist or was imposisible to open"<<std::endl;
+        return MS::kFailure;
+    }
+
+   
+
+    // todo : pile de parent pour garder en mémoire les anciens
+
+    MStringArray channel_array;
+    std::string value;
+    double offx, offy, offz;
+
+    std::string xPos("Xposition"), yPos("Yposition"), zPos("Zposition"), xRot("Xrotation"), yRot("Yrotation"), zRot("Zrotation");
+
+    bool close_flag = false;
+    bool motion_frame = false;
+
+    MObject rootNode = MObject::kNullObj;
+    MObject current_parent = MObject::kNullObj;
+
+    //Using the same logic as the python script
+    std::vector<MString> channel_lst;
+
+    // The temp variables
+    MStatus ret;
+    MFnIkJoint mfn_joint;
+    int time_frame = 0;
+
+
+    std:: cout << "============== Started the reading ==============="<<std::endl;
+    while (std::getline(inputfile, line)) {
+        
+        cerr<<"=="<<std::endl;
+        //cerr<<line<<std::endl;
+
+        // Just to test cuz I could not find variable size of line to work
+        char buffer[2000];
+        strcpy(buffer, line.c_str());
+
+        // Cannot set non chars
+        MString cmdString;
+        cmdString.set(buffer);
+
+        MStringArray curr_line_array;
+        cmdString.split(' ', curr_line_array);
+        curr_line_array = split_space(curr_line_array);
+
+        dump(curr_line_array)
+        
+        // Surpress this
+        /*
+        std::istringstream isub(line);
+        std::string label;
+        // Get the label
+        isub >> label;
+        detail(label)
+        */
+
+        if (!isMotion)
+        {
+             dump("In hierarchy")
+
+             dump(curr_line_array[0])
+
+            //detail(curr_line_array[0])
+            
+            // In the same fashion of the pytho script
+            if (curr_line_array[0] == "ROOT")
+            {
+                dump("inside root")
+
+                mfn_joint.create(MObject::kNullObj);
+
+                // change all strings to Mstring (does not accept it otherwise) Maya is bizzare
+                mfn_joint.setName(curr_line_array[1]);
+                
+                current_parent = mfn_joint.object();
+                
+                rootNode = mfn_joint.object();
+            }
+            else if (curr_line_array[0] == "MOTION")
+            {
+                dump("inside motion")
+                motion_frame = true; // stop for now
+            
+            }
+            else if (curr_line_array[0] == "OFFSET") 
+            {
+                offx = atof(curr_line_array[1].asChar());
+                offy = atof(curr_line_array[2].asChar());
+                offz = atof(curr_line_array[2].asChar());
+
+                dump("inside offset")
+
+                mfn_joint.setObject(current_parent);
+
+                MString joint_name = mfn_joint.name();
+                
+                if (close_flag) 
+                {
+                    joint_name = joint_name + MString("_end");
+                }
+
+                if (!current_parent.isNull()) 
+                {
+                    mfn_joint.setRotationOrder(MTransformationMatrix::RotationOrder::kXYZ, false);
+                    mfn_joint.setTranslation(MVector(offx, offy, offz), MSpace::kTransform);
+                }
+            }
+            else if (curr_line_array[0] == "CHANNELS")
+            {
+                dump("inside channels")
+
+                int n(atof(curr_line_array[1].asChar()));
+
+                // degrees of freedom
+
+                bool dofX(false), dofY(false), dofZ(false), dofXr(false), dofYr(false), dofZr(false);
+
+                for (int i = 0; i < n; i++)
+                {
+                    std::string dofName = curr_line_array[i].asChar();
+
+                    if (dofName == xRot) {
+                        dofXr = true;
+                    }
+                    else if (dofName == yRot) {
+                        dofYr = true;
+                    }
+                    else if (dofName == zRot) {
+                        dofZr = true;
+                    }
+                    if (dofName == xPos) {
+                        dofX = true;
+                    }
+                    else if (dofName == yPos) {
+                        dofY = true;
+                    }
+                    else if (dofName == zPos) {
+                        dofZ = true;
+                    }
+
+                    channel_lst.push_back(MString(maya_convert_notation(dofName).c_str()));
+                }
+                mfn_joint.setDegreesOfFreedom(dofX, dofY, dofZ);
+            }
+            else if(curr_line_array[0] == "JOINT")
+            {
+                dump("inside joint")
+
+                mfn_joint.create(current_parent, &ret);
+                mfn_joint.setName(curr_line_array[1]);
+                current_parent = mfn_joint.object();
+
+            }
+            else if (curr_line_array[0] == "}") 
+            {
+                dump("inside }")
+
+                if (close_flag) {
+                    close_flag = false; // signal the end and the recursive ascend (or la pile, at the time of me writin gthis I don't know what I used
+                    continue;
+                }
+
+                if (current_parent != MObject::kNullObj) { // if not none
+                    // we go one level above
+                    MFnIkJoint joint_handle(current_parent);
+                    dump(joint_handle.parentCount())
+                    current_parent = joint_handle.parent(joint_handle.parentCount() - 1); // this assumes only one parent which is normal, I hope
+
+                }
+
+            }
+            else {
+                cerr << "Unknown label" << std::endl;
+                detail(curr_line_array[0])
+            }
+        }
+        else {
+            std::cout << "In motion" << std::endl;
+            break;
+
+        }
+        
+
+    }
+}
+
+
+/*
+MFnIkJoint* parseJoint(std::ifstream& inputfile) {
+    MStatus status;
+    MFnIkJoint* root = new MFnIkJoint();
+    MObject transform = current->create(MObject::kNullObj, &status);
+    std::istringstream isub(line);
+
+    std::string nextword << isub;
+
+    std::string line;
+    std::getline(inputfile, line);
+
+    while (std::getline(inputfile, line)) {
+        std::istringstream isub(line);
+        std::string label;
+        isub >> label;
+
+        if (label == std::string("OFFSET")) {
+            double x, y, z;
+            isub >> x >> y >> z;
+            current->setTranslation(MVector(x, y, z), MSpace::kObject);
+        }
+        else if (label == std::string("CHANNELS")) {
+            int n;
+            isub >> n;
+            for (int i = 0; i < n; i++) {
+                //animation
+            }
+        }
+        else if (label == std::string("JOINT")) {
+            std::string name;
+            isub >> name;
+            MString nameMaya = name.c_str();
+            MObject childTransform = child->create(MObject::kNullObj, &status);
+            status = current->addChild(childTransform, MFnDagNode::kNextPos, false);
+        }
+        else if (label == std::string("}")) {
+            return current;
+        }
+        else {
+            throw std::runtime_error("Unknown label");
+        }
+
+    }
+}
+*/
+
+
 // An Bvh file is an ascii whose first line contains the string .
 //
-MStatus BvhTranslator::reader ( const MFileObject& file,
-                                const MString& options,
-                                MPxFileTranslator::FileAccessMode mode)
-{    
+MStatus BvhTranslator::reader(const MFileObject& file,
+    const MString& options,
+    MPxFileTranslator::FileAccessMode mode)
+{
     const MString fname = file.expandedFullName();
 
+    std:: cout << fname << std:: endl;
+
+    std::cout << "==========================================================" << std::endl;
+    std::cout << "==========================================================" << std::endl;
+    std::cout << "==========================================================" << std::endl;
+    std::cout << "==========================================================" << std::endl;
+
     MStatus rval(MS::kSuccess);
-    const int maxLineSize = 1024;
-    char buf[maxLineSize];
+    // TODO
+    bool ret = parseJoint1(file);
 
-    std::ifstream inputfile(fname.asChar(), std::ios::in);
-    if (!inputfile) {
-        // open failed
-        std::cerr << fname << ": could not be opened for reading\n";
-        return MS::kFailure;
-    }
+    dump("The reading is done")
 
-    if (!inputfile.getline (buf, maxLineSize)) {
-        std::cerr << "file " << fname << " contained no lines ... aborting\n";
-        return MS::kFailure;
-    }
-
-    if (0 != strncmp(buf, magic.asChar(), magic.length())) {
-        std::cerr << "first line of file " << fname;
-        std::cerr << " did not contain " << magic.asChar() << " ... aborting\n";
-        return MS::kFailure;
-    }
-
-    while (inputfile.getline (buf, maxLineSize)) {
-        MString cmdString;
-
-        cmdString.set(buf);
-        // what to do here ???
-        if (!MGlobal::executeCommand(cmdString))
-            rval = MS::kFailure;
-    }
-    inputfile.close();
 
     return rval;
 }
@@ -206,12 +513,12 @@ const char* primitiveCommands[] = {
 //We will check if the object has a transform, if so, we will check
 //if it's either a nurbsSphere, nurbsCone or nurbsCylinder.  If so,
 //we will write it out.
-MStatus BvhTranslator::writer ( const MFileObject& file,
-                                const MString& options,
-                                MPxFileTranslator::FileAccessMode mode)
+MStatus BvhTranslator::writer(const MFileObject& file,
+    const MString& options,
+    MPxFileTranslator::FileAccessMode mode)
 {
     MStatus status;
-	bool showPositions = false;
+    bool showPositions = false;
     unsigned int  i;
     const MString fname = file.expandedFullName();
 
@@ -228,15 +535,16 @@ MStatus BvhTranslator::writer ( const MFileObject& file,
         MStringArray optionList;
         MStringArray theOption;
         options.split(';', optionList);    // break out all the options.
-        
-        for( i = 0; i < optionList.length(); ++i ){
+
+        for (i = 0; i < optionList.length(); ++i) {
             theOption.clear();
-            optionList[i].split( '=', theOption );
-            if( theOption[0] == MString("showPositions") &&
-                                                    theOption.length() > 1 ) {
-                if( theOption[1].asInt() > 0 ){
+            optionList[i].split('=', theOption);
+            if (theOption[0] == MString("showPositions") &&
+                theOption.length() > 1) {
+                if (theOption[1].asInt() > 0) {
                     showPositions = true;
-                }else{
+                }
+                else {
                     showPositions = false;
                 }
             }
@@ -246,54 +554,54 @@ MStatus BvhTranslator::writer ( const MFileObject& file,
     // output our magic number
     newf << "HIERARCHY\n";
 
-    MItDag dagIterator( MItDag::kBreadthFirst, MFn::kInvalid, &status);
+    MItDag dagIterator(MItDag::kBreadthFirst, MFn::kInvalid, &status);
 
-    if ( !status) {
-        status.perror ("Failure in DAG iterator setup");
+    if (!status) {
+        status.perror("Failure in DAG iterator setup");
         return MS::kFailure;
     }
 
     MSelectionList selection;
-    MGlobal::getActiveSelectionList (selection);
-    MItSelectionList selIterator (selection, MFn::kDagNode);
+    MGlobal::getActiveSelectionList(selection);
+    MItSelectionList selIterator(selection, MFn::kDagNode);
 
     bool done = false;
-    while (true) 
+    while (true)
     {
         MObject currentNode;
         switch (mode)
         {
-            case MPxFileTranslator::kSaveAccessMode:
-            case MPxFileTranslator::kExportAccessMode:
-                if (dagIterator.isDone ())
-                    done = true;
-                else {
-                    currentNode = dagIterator.currentItem ();
-                    dagIterator.next ();
-                }
-                break;
-            case MPxFileTranslator::kExportActiveAccessMode:
-                if (selIterator.isDone ())
-                    done = true;
-                else {
-                    selIterator.getDependNode (currentNode);
-                    selIterator.next ();
-                }
-                break;
-            default:
-                std::cerr << "Unrecognized write mode: " << mode << std::endl;
-                break;
+        case MPxFileTranslator::kSaveAccessMode:
+        case MPxFileTranslator::kExportAccessMode:
+            if (dagIterator.isDone())
+                done = true;
+            else {
+                currentNode = dagIterator.currentItem();
+                dagIterator.next();
+            }
+            break;
+        case MPxFileTranslator::kExportActiveAccessMode:
+            if (selIterator.isDone())
+                done = true;
+            else {
+                selIterator.getDependNode(currentNode);
+                selIterator.next();
+            }
+            break;
+        default:
+            std::cerr << "Unrecognized write mode: " << mode << std::endl;
+            break;
         }
         if (done)
             break;
 
         //We only care about nodes that are transforms
         MFnTransform dagNode(currentNode, &status);
-        if ( status == MS::kSuccess ) 
+        if (status == MS::kSuccess)
         {
-            MString nodeNameNoNamespace=MNamespace::stripNamespaceFromName(dagNode.name());
-            for (i = 0; i < numPrimitives; ++i) {                
-                if(nodeNameNoNamespace.indexW(primitiveStrings[i]) >= 0){
+            MString nodeNameNoNamespace = MNamespace::stripNamespaceFromName(dagNode.name());
+            for (i = 0; i < numPrimitives; ++i) {
+                if (nodeNameNoNamespace.indexW(primitiveStrings[i]) >= 0) {
                     // This is a node we support
                     newf << primitiveCommands[i] << " -n " << nodeNameNoNamespace << std::endl;
                     if (showPositions) {
@@ -315,7 +623,7 @@ MStatus BvhTranslator::writer ( const MFileObject& file,
 // "test" using the Save As dialog, Maya will call this method and actually
 // save it as "test.Bvh". Note that the period should *not* be included in
 // the extension.
-MString BvhTranslator::defaultExtension () const
+MString BvhTranslator::defaultExtension() const
 {
     return "Bvh";
 }
@@ -324,10 +632,10 @@ MString BvhTranslator::defaultExtension () const
 //This method is pretty simple, maya will call this function
 //to make sure it is really a file from our translator.
 //To make sure, we have a little magic number and we verify against it.
-MPxFileTranslator::MFileKind BvhTranslator::identifyFile (
-                                        const MFileObject& fileName,
-                                        const char* buffer,
-                                        short size) const
+MPxFileTranslator::MFileKind BvhTranslator::identifyFile(
+    const MFileObject& fileName,
+    const char* buffer,
+    short size) const
 {
     // Check the buffer for the "Bvh" magic number, the
     // string "<Bvh>\n"
@@ -335,17 +643,17 @@ MPxFileTranslator::MFileKind BvhTranslator::identifyFile (
     MFileKind rval = kNotMyFileType;
 
     if ((size >= (short)magic.length()) &&
-        (0 == strncmp(buffer, magic.asChar(), magic.length()))) 
+        (0 == strncmp(buffer, magic.asChar(), magic.length())))
     {
         rval = kIsMyFileType;
     }
     return rval;
 }
 
-MStatus initializePlugin( MObject obj )
+MStatus initializePlugin(MObject obj)
 {
     MStatus   status;
-    MFnPlugin plugin( obj, PLUGIN_COMPANY, "3.0", "Any");
+    MFnPlugin plugin(obj, PLUGIN_COMPANY, "3.0", "Any");
 
     // Register the translator with the system
     // The last boolean in this method is very important.
@@ -354,13 +662,13 @@ MStatus initializePlugin( MObject obj )
     // method.  Setting this to true will slow down the creation of
     // new objects, but allows MEL commands other than those that are
     // part of the Maya Ascii file format to function correctly.
-    status =  plugin.registerFileTranslator( "Bvh",
-                                        "BvhTranslator.rgb",
-                                        BvhTranslator::creator,
-                                        "BvhTranslatorOpts",
-                                        "showPositions=1",
-                                        true );
-    if (!status) 
+    status = plugin.registerFileTranslator("Bvh",
+        "BvhTranslator.rgb",
+        BvhTranslator::creator,
+        "BvhTranslatorOpts",
+        "showPositions=1",
+        true);
+    if (!status)
     {
         status.perror("registerFileTranslator");
         return status;
@@ -369,12 +677,12 @@ MStatus initializePlugin( MObject obj )
     return status;
 }
 
-MStatus uninitializePlugin( MObject obj )
+MStatus uninitializePlugin(MObject obj)
 {
     MStatus   status;
-    MFnPlugin plugin( obj );
+    MFnPlugin plugin(obj);
 
-    status =  plugin.deregisterFileTranslator( "Bvh" );
+    status = plugin.deregisterFileTranslator("Bvh");
     if (!status)
     {
         status.perror("deregisterFileTranslator");
@@ -383,4 +691,5 @@ MStatus uninitializePlugin( MObject obj )
 
     return status;
 }
+
 
