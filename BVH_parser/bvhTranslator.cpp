@@ -202,7 +202,7 @@ MStringArray split_space(const MStringArray& array)
 
 
 
-#define dump(a) std::cout << #a " : " << (a) << std::endl;
+#define dump(a) std::cout << #a " : " <<"|"<<(a)<<"|" << std::endl;
 #define detail(a) std::cout << "["; for (auto s : line){ std::cout << s << "|";} std::cout << "]\n";
 
 bool parseJoint1(const MFileObject& file) 
@@ -280,6 +280,8 @@ bool parseJoint1(const MFileObject& file)
         curr_line_array = split_space(curr_line_array);
 
         dump(curr_line_array)
+
+        bool end_site = false;
         
         // Surpress this
         /*
@@ -292,7 +294,7 @@ bool parseJoint1(const MFileObject& file)
 
         if (!isMotion)
         {
-             dump("In hierarchy")
+             //dump("In hierarchy")
 
              dump(curr_line_array[0])
 
@@ -386,8 +388,24 @@ bool parseJoint1(const MFileObject& file)
                 mfn_joint.setName(curr_line_array[1]);
                 current_parent = mfn_joint.object();
 
+
+                // To convert the current parent sub-object to joint
+                MFnIkJoint joint_handle(mfn_joint.parent(0));
+                MString name = joint_handle.name();
+
+                std::cout << "============" << std::endl;
+                std::cout << "The joint " << mfn_joint.name() << " has parent " << name << std::endl;
+
+
             }
-            else if (curr_line_array[0] == "}") 
+             /*
+            else if (curr_line_array[0] == "END")
+            {
+                end_site = true;
+            }
+            */
+            else if (*curr_line_array[0].asChar() == '}')
+            //else if (end_site)
             {
                 dump("inside }")
 
@@ -396,18 +414,41 @@ bool parseJoint1(const MFileObject& file)
                     continue;
                 }
 
-                if (current_parent != MObject::kNullObj) { // if not none
-                    // we go one level above
-                    MFnIkJoint joint_handle(current_parent);
-                    dump(joint_handle.parentCount())
-                    current_parent = joint_handle.parent(joint_handle.parentCount() - 1); // this assumes only one parent which is normal, I hope
+                MFnIkJoint joint_handle(current_parent);
+                if (joint_handle.parent(0) != MObject::kNullObj) { // if not none
+                    // we go one level 
+                    dump(joint_handle.name())
+                    dump("has parent")
+                    
+                    current_parent = joint_handle.parent(0); // this assumes only one parent which is normal, I hope
+                    
+                    MFnIkJoint j1(current_parent);
+                    dump(j1.name())
+
+                    dump("whose parent is ")
+
+
+                    MFnIkJoint j2(j1.parent(0));
+                    dump(j2.name())
+                        
+                    
+
+                    //MFnIkJoint joint_handle1(current_parent);
+
+                    /*
+                    if (joint_handle1.parent(1) != MObject::kNullObj)
+                    {
+                        current_parent = joint_handle1.parent(1);
+                    }
+                    */
 
                 }
+                end_site = false;
 
             }
             else {
                 cerr << "Unknown label" << std::endl;
-                detail(curr_line_array[0])
+                dump(curr_line_array[0].asChar())
             }
         }
         else {
@@ -478,6 +519,13 @@ MStatus BvhTranslator::reader(const MFileObject& file,
     const MString fname = file.expandedFullName();
 
     std:: cout << fname << std:: endl;
+
+    MString test;
+    test.set("{");
+    dump(test.asChar())
+    dump("{")
+    bool b = strcmp(test.asChar(), "}");
+    dump(b)
 
     std::cout << "==========================================================" << std::endl;
     std::cout << "==========================================================" << std::endl;
