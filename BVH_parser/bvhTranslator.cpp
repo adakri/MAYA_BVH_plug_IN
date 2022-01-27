@@ -69,7 +69,9 @@
 #include <maya/MFileIO.h>
 #include <maya/MFnTransform.h>
 #include <maya/MNamespace.h>
+// the ones added
 #include <maya/MFnIkJoint.h> 
+#include <maya/MFnAnimCurve.h>
 
 #include <fstream>
 #include <iostream>
@@ -259,6 +261,11 @@ bool parseJoint1(const MFileObject& file)
     MStatus ret;
     MFnIkJoint mfn_joint;
     int time_frame = 0;
+    //https://download.autodesk.com/us/maya/2011help/API/class_m_fn_anim_curve.html
+    MFnAnimCurve animcurve_tab[96]; // 96 columns in bvh, did not find array structire with append-like method
+
+
+    int i(0);
 
 
     std:: cout << "============== Started the reading ==============="<<std::endl;
@@ -279,7 +286,7 @@ bool parseJoint1(const MFileObject& file)
         cmdString.split(' ', curr_line_array);
         curr_line_array = split_space(curr_line_array);
 
-        dump(curr_line_array)
+        //dump(curr_line_array)
 
         bool end_site = false;
         
@@ -296,9 +303,10 @@ bool parseJoint1(const MFileObject& file)
         {
              //dump("In hierarchy")
 
-             dump(curr_line_array[0])
+             //dump(curr_line_array[0])
 
             //detail(curr_line_array[0])
+            
             
             // In the same fashion of the pytho script
             if (curr_line_array[0] == "ROOT")
@@ -384,6 +392,8 @@ bool parseJoint1(const MFileObject& file)
             {
                 dump("inside joint")
 
+                i = 0;
+
                 mfn_joint.create(current_parent, &ret);
                 mfn_joint.setName(curr_line_array[1]);
                 current_parent = mfn_joint.object();
@@ -393,8 +403,9 @@ bool parseJoint1(const MFileObject& file)
                 MFnIkJoint joint_handle(mfn_joint.parent(0));
                 MString name = joint_handle.name();
 
-                std::cout << "============" << std::endl;
+                std::cout << "============***==============================================" << std::endl;
                 std::cout << "The joint " << mfn_joint.name() << " has parent " << name << std::endl;
+                std::cout << "============***==============================================" << std::endl;
 
 
             }
@@ -415,23 +426,24 @@ bool parseJoint1(const MFileObject& file)
                 }
 
                 MFnIkJoint joint_handle(current_parent);
-                if (joint_handle.parent(0) != MObject::kNullObj) { // if not none
-                    // we go one level 
-                    dump(joint_handle.name())
-                    dump("has parent")
-                    
+                MObject temp = joint_handle.parent(0);
+                MFnIkJoint temp_joint(temp);
+
+                //if(joint_handle.parent(0) != MObject::kNullObj) 
+                //if (*temp_joint.name().asChar() != '\0') //empty char
+                if (*temp_joint.name().asChar() != '\0' && i<4) //empty char
+                { // if not none
+                    // we go one                    
                     current_parent = joint_handle.parent(0); // this assumes only one parent which is normal, I hope
                     
                     MFnIkJoint j1(current_parent);
-                    dump(j1.name())
-
-                    dump("whose parent is ")
-
-
                     MFnIkJoint j2(j1.parent(0));
-                    dump(j2.name())
+
+                    std::cout<< joint_handle.name()<<" has parent "<< j1.name()<<" whose parent is "<< j2.name()<<std::endl;
                         
-                    
+                    i += 1;
+
+                    dump(i)
 
                     //MFnIkJoint joint_handle1(current_parent);
 
@@ -443,6 +455,7 @@ bool parseJoint1(const MFileObject& file)
                     */
 
                 }
+                std::cout << joint_handle.name() << "is the current parent" << std::endl;
                 end_site = false;
 
             }
@@ -453,9 +466,39 @@ bool parseJoint1(const MFileObject& file)
         }
         else {
             std::cout << "In motion" << std::endl;
-            break;
+            // skip first two lines of motion section
+            if (curr_line_array[0] == "Frames:")
+            {
+                continue;
+            }
+            if (curr_line_array[0] == "Frames:")
+            {
+                continue;
+            }
+            MTime maya_time((double)(time_frame), MTime::kFilm);
+            // Start reading
+            MSelectionList curr_selection; // buff to store object we select using their names
+            MObject curr_attribute; // buff store attribute for the current object considered (ie translationX)
+            MObject curr_attribute_rotate;
 
+            for (unsigned int i = 0; i < curr_line_array.length(); i++)
+            {
+                // for each channel and this for one frame
+                MGlobal::getSelectionListByName(channel_array[i], curr_selection);
+
+                MItSelectionList iter(curr_selection, MFn::kJoint);
+
+                MFnIkJoint mfn_test;
+
+                MObject curr_obj;
+
+                int itercount = 0;
+            }
+            time_frame += 1; // increase time
         }
+
+
+       
         
 
     }
