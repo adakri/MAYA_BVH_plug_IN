@@ -224,7 +224,7 @@ class HIERARCHY():
 
 if __name__ == "__main__":
 
-    FILE_NAME = "C:\\Users\\icasi\\Documents\\ANIMATION_3D\\ANIMATION_3D_projet\\test2.txt"
+    FILE_NAME = "C:\\Users\\Arthur\\Documents\\ingenierie3d\\maya_bvh_plugin\\BVH_parser\\squelette4.txt"
 
     print(FILE_NAME)
     

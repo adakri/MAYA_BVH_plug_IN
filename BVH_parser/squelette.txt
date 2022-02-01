@@ -1,0 +1,53 @@
+HIERARCHY
+ROOT chest
+{
+	OFFSET 0.00000 0.00000 0.00000
+	CHANNELS 6 Xposition Yposition Zposition Zrotation Yrotation Xrotation 
+	JOINT bicepsd
+	{
+		OFFSET 2 0 0
+		CHANNELS 3 Zrotation Yrotation Xrotation
+		JOINT avantbrasd
+		{	
+			OFFSET 3 0 0
+			CHANNELS 3 Zrotation Yrotation Xrotation
+			JOINT maind
+			{
+				OFFSET 2 0 0
+				CHANNELS 3 Zrotation Yrotation Xrotation
+				End Site
+				{
+					End Site
+					{
+						OFFSET 1 0 0 
+					}
+				}
+			}
+		}
+	}
+	JOINT bicepsg
+	{
+		OFFSET -2 0 0
+		CHANNELS 3 Zrotation Yrotation Xrotation
+		JOINT avantbrasg
+		{	
+			OFFSET -3 0 0
+			CHANNELS 3 Zrotation Yrotation Xrotation
+			JOINT maing
+			{
+				OFFSET -2 0 0
+				CHANNELS 3 Zrotation Yrotation Xrotation
+				End Site
+				{
+					End Site
+					{
+						OFFSET -1 0 0 
+					}
+				}
+			}
+		}
+	}
+}
+MOTION
+Frames: 0
+Frame Time: 0.03333
