@@ -224,7 +224,7 @@ class HIERARCHY():
 
 if __name__ == "__main__":
 
-    FILE_NAME = "C:\\Users\\icasi\\Documents\\ANIMATION_3D\\ANIMATION_3D_projet\\run.bvh"
+    FILE_NAME = "C:\\Users\\icasi\\Documents\\ANIMATION_3D\\ANIMATION_3D_projet\\test2.txt"
 
     print(FILE_NAME)
     
