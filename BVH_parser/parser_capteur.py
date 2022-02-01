@@ -34,11 +34,11 @@ class TEST():
                 psi = psi*180/math.pi
                 file_to_write.write("0 0 0 0 0 0")
                 file_to_write.write(" ")
-                file_to_write.write(str(phi))
+                file_to_write.write(str(psi))
                 file_to_write.write(" ")
                 file_to_write.write(str(theta))
                 file_to_write.write(" ")
-                file_to_write.write(str(psi))
+                file_to_write.write(str(phi))
                 file_to_write.write(" ")
                 file_to_write.write("0 0 0")
                 file_to_write.write("\n")
@@ -46,12 +46,7 @@ class TEST():
         file_to_write.close()
         f.close()
         
-
-
-
-
-
 if __name__ == "__main__":
-    FILE_NAME="D:\\téléchargements\\Ensimag\\maya\\resultat_capteur_1.txt"
+    FILE_NAME="C:\\Users\\Arthur\\Documents\\ingenierie3d\\maya_bvh_plugin\\BVH_parser\\resultat_capteur_1.txt"
     go = TEST(FILE_NAME)
     go.parse()
