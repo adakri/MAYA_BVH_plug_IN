@@ -72,6 +72,8 @@
 // the ones added
 #include <maya/MFnIkJoint.h> 
 #include <maya/MFnAnimCurve.h>
+#include <maya/MDagPath.h>
+
 
 #include <fstream>
 #include <iostream>
@@ -152,7 +154,9 @@ MString const BvhTranslator::magic("HIERARCHY");
 
 
 //Uisng the notation conversion fromp the Maya python API
-std::string maya_convert_notation(std::string str) {
+std::string maya_convert_notation(std::string str) 
+{
+    str.erase(std::remove(str.begin(), str.end(), ' '), str.end());
     if (str == "Xposition") {
         return "translateX";
     }
@@ -201,7 +205,12 @@ MStringArray split_space(const MStringArray& array)
 }
 
 //  Try comparing arrays to mstring
-
+bool contains_mstring(std::string str1, std::string str2) {
+    if (str1.find(str2) != std::string::npos) {
+        return true;
+    }
+    return false;
+}
 
 
 #define dump(a) std::cout << #a " : " <<"|"<<(a)<<"|" << std::endl;
@@ -322,10 +331,10 @@ bool parseJoint1(const MFileObject& file)
                 
                 rootNode = mfn_joint.object();
             }
-            else if (curr_line_array[0] == "MOTION")
+            else if (curr_line_array[0] == "Frames:")
             {
                 dump("inside motion")
-                motion_frame = true; // stop for now
+                isMotion = true; // stop for now
             
             }
             else if (curr_line_array[0] == "OFFSET") 
@@ -335,6 +344,10 @@ bool parseJoint1(const MFileObject& file)
                 offz = atof(curr_line_array[2].asChar());
 
                 dump("inside offset")
+
+                dump(offx)
+                dump(offy)
+                dump(offz)
 
                 mfn_joint.setObject(current_parent);
 
@@ -355,36 +368,62 @@ bool parseJoint1(const MFileObject& file)
             {
                 dump("inside channels")
 
+                dump(curr_line_array)
+
                 int n(atof(curr_line_array[1].asChar()));
+
+                dump(n)
 
                 // degrees of freedom
 
                 bool dofX(false), dofY(false), dofZ(false), dofXr(false), dofYr(false), dofZr(false);
 
-                for (int i = 0; i < n; i++)
+                for (int i = 0; i < curr_line_array.length() - 2; i++)
                 {
-                    std::string dofName = curr_line_array[i].asChar();
+                    std::string dofName = curr_line_array[i+2].asChar();
 
-                    if (dofName == xRot) {
+                    //dofName.erase(std::remove(dofName.begin(), dofName.end(), ' '), dofName.end());
+
+                    dump(dofName)
+
+                    bool found = false;
+
+                    if (dofName == "Xrotation") {
                         dofXr = true;
+                        found = true;
                     }
                     else if (dofName == yRot) {
                         dofYr = true;
+                        found = true;
                     }
                     else if (dofName == zRot) {
                         dofZr = true;
+                        found = true;
                     }
                     if (dofName == xPos) {
                         dofX = true;
+                        found = true;
                     }
                     else if (dofName == yPos) {
                         dofY = true;
+                        found = true;
                     }
                     else if (dofName == zPos) {
                         dofZ = true;
+                        found = true;
                     }
 
-                    channel_lst.push_back(MString(maya_convert_notation(dofName).c_str()));
+                    if (found) {
+                        dump(maya_convert_notation(dofName))
+                        dump(MString(maya_convert_notation(dofName).c_str()))
+                        channel_lst.push_back(MString(maya_convert_notation(dofName).c_str()));
+                    }
+                    else {
+                        dofName = "Xrotation";
+                        dump(maya_convert_notation(dofName))
+                        dump(MString(maya_convert_notation(dofName).c_str()))
+                        channel_lst.push_back(MString(maya_convert_notation(dofName).c_str()));
+                    }
                 }
                 mfn_joint.setDegreesOfFreedom(dofX, dofY, dofZ);
             }
@@ -396,6 +435,8 @@ bool parseJoint1(const MFileObject& file)
 
                 mfn_joint.create(current_parent, &ret);
                 mfn_joint.setName(curr_line_array[1]);
+                //set inside channel
+                channel_array.append(curr_line_array[1]);
                 current_parent = mfn_joint.object();
 
 
@@ -481,20 +522,165 @@ bool parseJoint1(const MFileObject& file)
             MObject curr_attribute; // buff store attribute for the current object considered (ie translationX)
             MObject curr_attribute_rotate;
 
-            for (unsigned int i = 0; i < curr_line_array.length(); i++)
-            {
-                // for each channel and this for one frame
-                MGlobal::getSelectionListByName(channel_array[i], curr_selection);
+            //Testign
+            MDagPath node;
+            MObject component; //buff
+            MFnDagNode nodeFn; // buff
 
-                MItSelectionList iter(curr_selection, MFn::kJoint);
+            dump(curr_line_array)
+            dump(curr_line_array.length())
+
+            dump(channel_lst.size())
+            dump(channel_array.length())
+
+
+            for(auto e : channel_array)
+            {
+                dump(e.asChar())
+            }
+            ;
+
+            for(int i =0; i < curr_line_array.length(); i++)
+            {
+                int itercount = 0;
+
+
+                std::string name = "";
+                name = channel_array[itercount].asChar();
+                dump(channel_array[itercount])
+
+
+                // for each channel and this for one frame
+                cerr << "selecting by name object " << name << endl;
+
+                //Strip all 
+                name.erase(std::remove_if(name.begin(), name.end(), isspace), name.end());
+                MString name_m(name.c_str());
+
+                ret = MGlobal::getSelectionListByName(name_m, curr_selection);
+
+                MItSelectionList iter(curr_selection, MFn::kJoint, &ret);
+
+                curr_selection.getDagPath(i, node, component);
+                nodeFn.setObject(node);
+                cout << nodeFn.name().asChar() << " is selected" << endl;
+                
 
                 MFnIkJoint mfn_test;
-
                 MObject curr_obj;
 
-                int itercount = 0;
-            }
-            time_frame += 1; // increase time
+
+
+                iter.getDependNode(curr_obj); // get the MObject node (result in curr_obj) that correspond to current iterator value
+                mfn_test.setObject(curr_obj); // bind MFnIkJoint function set on curr_obj, used to retrieve the attribute by their names
+
+                
+                // iterate through the selection (active list)
+                for (; !iter.isDone(); iter.next())
+				{
+                    dump("inside iter")
+					
+
+                    dump(mfn_test.name())
+
+					if (i < 3)
+                    { 
+                        // Root has 6 channels, the rest only 3
+
+						if ((i % 3) == 0) {
+						
+							if (time_frame == 0) {
+
+								curr_attribute = mfn_test.attribute("translateX", &ret);
+								if (ret != MStatus::kSuccess) {
+									cerr << "FAILED TO RETRIEVE ATTRIBUTE TRANSLATEX OF HIP" << endl;
+								}
+
+								// if first time we do the keyframe processing (ie time_frame = 0)
+								// then we have not yet created the animcurves
+								animcurve_tab[i].create(curr_obj, curr_attribute, NULL, &ret);
+								if (ret != MStatus::kSuccess) {
+									cerr << "FAILED TO CREATE ATTRIBUTE TRANSLATEX OF HIP" << endl;
+								}
+							}
+
+							animcurve_tab[i].addKeyframe(maya_time, atof(curr_line_array[i].asChar()));
+						}
+						else if ((i % 3) == 1) {
+
+							if (time_frame == 0) {
+								curr_attribute = mfn_test.attribute("translateY", &ret);
+								animcurve_tab[i].create(curr_obj, curr_attribute, NULL, &ret);
+							}
+
+							animcurve_tab[i].addKeyframe(maya_time, atof(curr_line_array[i].asChar()));
+						}
+						else if ((i % 3) == 2) {
+							
+							if (time_frame == 0) {
+								curr_attribute = mfn_test.attribute("translateZ", &ret);
+								animcurve_tab[i].create(curr_obj, curr_attribute, NULL, &ret);
+							}
+
+							MStatus test_status = animcurve_tab[i].addKeyframe(maya_time, atof(curr_line_array[i].asChar()));
+							if (test_status != MStatus::kSuccess) {
+								cerr << "ERROR SETTING TZ KEYFRAME" << endl;
+							}
+						}
+					}
+					else {
+						if ((i % 3) == 0) {
+
+							if (time_frame == 0) {
+								curr_attribute_rotate = mfn_test.attribute("rotateZ", &ret);
+								if (ret != MStatus::kSuccess) {
+									cerr << "FAILED TO RETRIEVE ATTRIBUTE ROTATEZ" << endl;
+								}
+
+								animcurve_tab[i].create(curr_obj, curr_attribute_rotate, NULL, &ret);
+							}
+
+							MStatus rz_status = animcurve_tab[i].addKeyframe(maya_time, atof(curr_line_array[i].asChar())*(3.14 / 180));
+
+							if (rz_status != MStatus::kSuccess) {
+								cerr << "ERROR SETTING RZ KEYFRAME" << endl;
+
+							}
+						}
+						else if ((i % 3) == 1) {
+
+							if (time_frame == 0) {
+								curr_attribute_rotate = mfn_test.attribute("rotateY", &ret);
+								animcurve_tab[i].create(curr_obj, curr_attribute_rotate, NULL, &ret);
+							}
+
+							animcurve_tab[i].addKeyframe(maya_time, atof(curr_line_array[i].asChar())*(3.14 / 180));
+						}
+						else if ((i % 3) == 2) {
+
+							if (time_frame == 0) {
+								curr_attribute_rotate = mfn_test.attribute("rotateX", &ret);
+								animcurve_tab[i].create(curr_obj, curr_attribute_rotate, NULL, &ret);
+							}
+
+							animcurve_tab[i].addKeyframe(maya_time, atof(curr_line_array[i].asChar())*( 3.14 / 180));
+						}
+					}
+					itercount += 1;
+				}
+				
+                /*
+                if (itercount > 1) {
+					// for our code to work, we for now suppose each joint
+					// has a different name since we do not use the
+					// fullPathName to retrieve them, but only their
+					// .name() (for example "l_hip"
+					cerr << "==== ERROR TWO OBJECTS HAVE SAME NAME " << endl;
+				}
+                */
+                
+			}
+			time_frame += 1; // increase time
         }
 
 
@@ -574,6 +760,23 @@ MStatus BvhTranslator::reader(const MFileObject& file,
     std::cout << "==========================================================" << std::endl;
     std::cout << "==========================================================" << std::endl;
     std::cout << "==========================================================" << std::endl;
+    std::cout << "============***==============================================" << std::endl;
+    std::cout << "============***==============================================" << std::endl;
+    std::cout << "============***==============================================" << std::endl;
+    std::cout << "============***==============================================" << std::endl;
+    std::cout << "============***==============================================" << std::endl;
+    std::cout << "============***==============================================" << std::endl;
+    std::cout << "============***==============================================" << std::endl;
+    std::cout << "============***==============================================" << std::endl;
+    std::cout << "============***==============================================" << std::endl;
+    std::cout << "============***==============================================" << std::endl;
+    std::cout << "============***==============================================" << std::endl;
+    std::cout << "============***==============================================" << std::endl;
+    std::cout << "============***==============================================" << std::endl;
+    std::cout << "============***==============================================" << std::endl;
+    std::cout << "============***==============================================" << std::endl;
+    std::cout << "============***==============================================" << std::endl;
+    std::cout << "============***==============================================" << std::endl;
 
     MStatus rval(MS::kSuccess);
     // TODO
